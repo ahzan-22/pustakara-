@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useState } from "react";
+import Link from "next/link"
+import { useCallback, useState } from "react"
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 
-import { searchBooks, type GoogleBook } from "@/lib/google-books";
+import { searchBooks, type GoogleBook } from "@/lib/google-books"
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -94,10 +95,10 @@ export default function Home() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {books.map((book) => (
-                  <Card
-                    key={book.id}
-                    className="flex flex-col h-full cursor-pointer hover:shadow-md transition-shadow duration-200"
-                  >
+                  <Link key={book.id} href={`/books/${book.id}`}>
+                    <Card
+                      className="flex flex-col h-full cursor-pointer hover:shadow-md transition-shadow duration-200"
+                    >
                     <CardHeader className="p-0">
                       <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted relative">
                         {book.thumbnail ? (
@@ -123,7 +124,8 @@ export default function Home() {
                         {book.author || "Penulis tidak diketahui"}
                       </p>
                     </CardContent>
-                  </Card>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             </>
