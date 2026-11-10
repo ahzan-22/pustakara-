@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { cn } from "cn"
 import { Button } from "@/components/ui/button"
+import { createClient } from "@/lib/supabase/client"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,10 +12,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { BookOpen, LogIn, Menu, X } from "lucide-react"
+import { BookOpen, LogIn, LogOut, Menu, X, User } from "lucide-react"
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [session, setSession] = useState<any>(null)
+  const supabase = createClient()
+
+  useEffect(() => {
+    const initSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      setSession(data.session)
+    }
+    initSession()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+  }
+
+  const userName =
+    session?.user?.user_metadata?.full_name ||
+    session?.user?.email?.split("@")[0] ||
+    "Pengguna"
+  const userEmail = session?.user?.email ?? ""
 
   return (
     <nav
@@ -58,10 +89,25 @@ export default function Navbar() {
             Dashboard
           </Link>
 
-          <Button className="h-9 px-4">
-            Masuk
-            <LogIn className="ml-2 h-4 w-4" />
-          </Button>
+          {session ? (
+            <div className="flex items-center gap-3">
+              <div className="hidden md:flex flex-col items-end text-sm">
+                <span className="font-medium text-foreground">{userName}</span>
+                <span className="text-muted-foreground">{userEmail}</span>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
+                Keluar
+                <LogOut className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Link href="/login">
+              <Button className="h-9 px-4">
+                Masuk
+                <LogIn className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Mobile toggle */}
@@ -109,7 +155,21 @@ export default function Navbar() {
               Dashboard
             </Link>
 
-            <Button className="w-full">Masuk</Button>
+            {session ? (
+              <div className="space-y-2">
+                <div className="px-3 py-2 text-sm">
+                  <span className="block font-medium text-foreground">{userName}</span>
+                  <span className="block text-xs text-muted-foreground">{userEmail}</span>
+                </div>
+                <Button variant="outline" className="w-full" onClick={handleLogout}>
+                  Keluar
+                </Button>
+              </div>
+            ) : (
+              <Link href="/login">
+                <Button className="w-full">Masuk</Button>
+              </Link>
+            )}
           </div>
         </div>
       )}
