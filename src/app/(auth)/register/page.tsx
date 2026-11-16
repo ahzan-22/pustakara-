@@ -38,7 +38,9 @@ export default function RegisterPage() {
       password,
       options: {
         data: {
-          full_name: fullName,
+          // Nama Lengkap ikut dikirim ke Supabase agar tersimpan di
+          // auth.users (raw_user_meta_data) lalu di-trigger ke public.profiles
+          full_name: fullName.trim(),
         },
       },
     })

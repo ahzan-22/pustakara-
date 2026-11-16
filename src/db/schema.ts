@@ -46,6 +46,7 @@ export const categories = pgTable("categories", {
 
 export const books = pgTable("books", {
   id: uuid("id").defaultRandom().primaryKey(),
+  googleBooksId: varchar("google_books_id", { length: 50 }).unique(),
   title: varchar("title", { length: 255 }).notNull(),
   author: varchar("author", { length: 255 }).notNull(),
   isbn: varchar("isbn", { length: 20 }).unique(),

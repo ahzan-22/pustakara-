@@ -95,7 +95,16 @@ async function BookDetailContent({
               </CardContent>
             </Card>
 
-            <BorrowButton />
+            <BorrowButton
+              bookData={{
+                id: book.id,
+                title: book.title,
+                author: book.author ?? null,
+                cover: book.thumbnail ?? null,
+                description: book.description ?? null,
+                publishedDate: book.publishedDate ?? null,
+              }}
+            />
           </div>
         </div>
       </div>

@@ -12,17 +12,33 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { BookOpen, LogIn, LogOut, Menu, X, User } from "lucide-react"
+import { BookOpen, LogIn, LogOut, Menu, ShieldCheck, X } from "lucide-react"
+import type { Session } from "@supabase/supabase-js"
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [session, setSession] = useState<any>(null)
-  const supabase = createClient()
+  const [session, setSession] = useState<Session | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [supabase] = useState(() => createClient())
 
   useEffect(() => {
+    const fetchRole = async (userId: string) => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", userId)
+        .single()
+      setIsAdmin(data?.role === "admin")
+    }
+
     const initSession = async () => {
       const { data } = await supabase.auth.getSession()
       setSession(data.session)
+      if (data.session?.user?.id) {
+        await fetchRole(data.session.user.id)
+      } else {
+        setIsAdmin(false)
+      }
     }
     initSession()
 
@@ -30,12 +46,17 @@ export default function Navbar() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
+      if (session?.user?.id) {
+        fetchRole(session.user.id)
+      } else {
+        setIsAdmin(false)
+      }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [])
+  }, [supabase])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -88,6 +109,16 @@ export default function Navbar() {
           >
             Dashboard
           </Link>
+
+          {isAdmin && (
+            <Link
+              href="/admin/loans"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/15 transition-colors"
+            >
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              Admin Panel
+            </Link>
+          )}
 
           {session ? (
             <div className="flex items-center gap-3">
@@ -154,6 +185,17 @@ export default function Navbar() {
             >
               Dashboard
             </Link>
+
+            {isAdmin && (
+              <Link
+                href="/admin/loans"
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-primary hover:bg-muted rounded-lg"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                Admin Panel
+              </Link>
+            )}
 
             {session ? (
               <div className="space-y-2">
