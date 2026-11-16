@@ -4,6 +4,10 @@ import Link from "next/link"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { BorrowButton } from "@/components/books/borrow-button"
+import {
+  ReviewsSection,
+  ReviewsSectionFallback,
+} from "@/components/books/reviews-section"
 import { getBookById, type GoogleBook } from "@/lib/google-books"
 
 async function BookDetailContent({
@@ -106,6 +110,13 @@ async function BookDetailContent({
               }}
             />
           </div>
+        </div>
+
+        {/* Ulasan Pembaca — di bawah tombol Pinjam */}
+        <div className="max-w-6xl mx-auto mt-12 border-t border-border pt-10">
+          <Suspense fallback={<ReviewsSectionFallback />}>
+            <ReviewsSection book={book} />
+          </Suspense>
         </div>
       </div>
     </>
