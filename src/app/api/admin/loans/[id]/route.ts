@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-const LOAN_ACTIONS = ["approve", "reject"] as const
+const LOAN_ACTIONS = ["approve", "reject", "return"] as const
 type LoanAction = (typeof LOAN_ACTIONS)[number]
 
 function isLoanAction(value: unknown): value is LoanAction {
@@ -14,10 +14,12 @@ function isLoanAction(value: unknown): value is LoanAction {
 
 /**
  * PATCH /api/admin/loans/[id]
- * Body: { action: "approve" | "reject" }
+ * Body: { action: "approve" | "reject" | "return" }
  *
  * - approve -> status 'borrowed', borrowed_at = sekarang, due_at = sekarang + 14 hari
  * - reject  -> status 'rejected'
+ * - return  -> status 'returned', returned_at = sekarang,
+ *              lalu auto-verify ulasan user tsb utk buku tsb (is_verified = true)
  * Hanya user dengan role 'admin' yang diizinkan.
  */
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
@@ -80,14 +82,16 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
     if (!isLoanAction(action)) {
       return NextResponse.json(
-        { error: "Action harus 'approve' atau 'reject'" },
+        { error: "Action harus 'approve', 'reject', atau 'return'" },
         { status: 400 },
       )
     }
 
-    // 4. Update status loan (hanya yang masih 'pending')
+    // 4. Update status loan (hanya dari status awal yang sesuai aksinya)
     const now = new Date()
     const dueAt = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000)
+
+    const expectedStatus = action === "return" ? "borrowed" : "pending"
 
     const payload =
       action === "approve"
@@ -96,14 +100,16 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
             borrowed_at: now.toISOString(),
             due_at: dueAt.toISOString(),
           }
-        : { status: "rejected" }
+        : action === "return"
+          ? { status: "returned", returned_at: now.toISOString() }
+          : { status: "rejected" }
 
     const { data: updated, error: updateError } = await supabase
       .from("loans")
       .update(payload)
       .eq("id", id)
-      .eq("status", "pending")
-      .select("id")
+      .eq("status", expectedStatus)
+      .select("id, user_id, book_id")
       .maybeSingle()
 
     if (updateError) {
@@ -121,12 +127,35 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       )
     }
 
+    // 5. Auto-verify ulasan: buku sudah dikembalikan -> is_verified = true
+    if (action === "return") {
+      const { error: reviewError } = await supabase
+        .from("reviews")
+        .update({ is_verified: true })
+        .eq("user_id", updated.user_id)
+        .eq("book_id", updated.book_id)
+
+      if (reviewError) {
+        console.error(
+          "Auto verify review error:",
+          reviewError.message,
+          reviewError.code,
+        )
+        return NextResponse.json(
+          { error: "Buku berhasil dikembalikan, tetapi verifikasi ulasan gagal" },
+          { status: 500 },
+        )
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message:
         action === "approve"
           ? "Peminjaman disetujui"
-          : "Peminjaman ditolak",
+          : action === "return"
+            ? "Buku dikembalikan dan ulasan diverifikasi"
+            : "Peminjaman ditolak",
     })
   } catch (error) {
     console.error("Admin loan API error:", error)

@@ -18,7 +18,7 @@ import { LoanActions } from "./loan-actions"
 
 // --- Tipe data ---
 
-type PendingLoanRow = {
+type AdminLoanRow = {
   id: string
   status?: string | null
   created_at?: string | null
@@ -39,7 +39,7 @@ function formatDate(value?: string | null): string {
   }).format(date)
 }
 
-function getBorrowerName(loan: PendingLoanRow): string {
+function getBorrowerName(loan: AdminLoanRow): string {
   const name = loan.profiles?.full_name || loan.borrower_name
   if (typeof name === "string" && name.trim() !== "") return name
   return "Tidak diketahui"
@@ -91,8 +91,9 @@ async function AdminLoansContent() {
     redirect("/")
   }
 
-  // Ambil semua peminjaman berstatus 'pending' + join judul buku & nama peminjam
-  let loans: PendingLoanRow[] = []
+  // Ambil peminjaman berstatus 'pending' (perlu persetujuan) dan 'borrowed'
+  // (perlu konfirmasi pengembalian) + join judul buku & nama peminjam
+  let loans: AdminLoanRow[] = []
 
   const { data: joinedData, error: joinError } = await supabase
     .from("loans")
@@ -103,7 +104,7 @@ async function AdminLoansContent() {
       books ( title ),
       profiles ( full_name )
     `)
-    .eq("status", "pending")
+    .in("status", ["pending", "borrowed"])
     .order("created_at", { ascending: true })
 
   if (joinError || !joinedData) {
@@ -124,13 +125,13 @@ async function AdminLoansContent() {
         user_id,
         books ( title )
       `)
-      .eq("status", "pending")
+      .in("status", ["pending", "borrowed"])
       .order("created_at", { ascending: true })
 
     if (loanError) {
-      console.error("Gagal memuat peminjaman pending:", loanError.message, loanError.code)
+      console.error("Gagal memuat peminjaman:", loanError.message, loanError.code)
     } else {
-      loans = (loanData ?? []) as unknown as PendingLoanRow[]
+      loans = (loanData ?? []) as unknown as AdminLoanRow[]
 
       const userIds = Array.from(
         new Set(
@@ -163,7 +164,7 @@ async function AdminLoansContent() {
       }
     }
   } else {
-    loans = joinedData as unknown as PendingLoanRow[]
+    loans = joinedData as unknown as AdminLoanRow[]
   }
 
   const hasPending = loans.length > 0
@@ -174,12 +175,13 @@ async function AdminLoansContent() {
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-6 w-6 text-primary" aria-hidden="true" />
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Admin Panel — Persetujuan Peminjaman
+            Admin Panel — Peminjaman Buku
           </h1>
         </div>
         <p className="text-sm text-muted-foreground sm:text-base">
-          Setujui atau tolak pengajuan peminjaman buku yang berstatus{" "}
-          <span className="font-medium text-foreground">Pending</span>.
+          Setujui atau tolak pengajuan peminjaman, dan konfirmasi pengembalian
+          buku yang berstatus{" "}
+          <span className="font-medium text-foreground">Dipinjam</span>.
         </p>
       </div>
 
@@ -190,10 +192,11 @@ async function AdminLoansContent() {
               <Inbox className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
             </div>
             <p className="text-base font-medium">
-              Tidak ada pengajuan yang menunggu persetujuan.
+              Tidak ada peminjaman yang perlu diproses.
             </p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Pengajuan peminjaman baru akan muncul di sini secara otomatis.
+              Pengajuan baru dan peminjaman aktif akan muncul di sini secara
+              otomatis.
             </p>
           </div>
         ) : (
@@ -224,16 +227,25 @@ async function AdminLoansContent() {
                         {formatDate(loan.created_at)}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className="border-yellow-200 bg-yellow-100 text-yellow-800"
-                        >
-                          Pending
-                        </Badge>
+                        {loan.status === "borrowed" ? (
+                          <Badge
+                            variant="outline"
+                            className="border-blue-200 bg-blue-100 text-blue-800"
+                          >
+                            Dipinjam
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-yellow-200 bg-yellow-100 text-yellow-800"
+                          >
+                            Pending
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end">
-                          <LoanActions loanId={loan.id} />
+                          <LoanActions loanId={loan.id} status={loan.status} />
                         </div>
                       </TableCell>
                     </TableRow>

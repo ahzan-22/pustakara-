@@ -168,16 +168,46 @@ async function DashboardContent() {
     redirect("/login")
   }
 
-  // Get user role + nama dari profiles table
-  const { data: profile, error: profileError } = await supabase
+  // Get user role + nama dari profiles table.
+  // Akun yang tercipta sebelum trigger handle_new_user terpasang tidak punya
+  // baris profile; buat dulu supaya tidak redirect ke /login saat sudah login.
+  const { data: existingProfile, error: profileError } = await supabase
     .from("profiles")
     .select("role, full_name")
     .eq("id", session.user.id)
-    .single()
+    .maybeSingle()
 
   if (profileError) {
     console.error("Gagal memuat profil user:", profileError.message, profileError.code)
     redirect("/login")
+  }
+
+  let profile = existingProfile
+
+  if (!profile) {
+    const { data: created, error: createError } = await supabase
+      .from("profiles")
+      .insert({
+        id: session.user.id,
+        full_name:
+          session.user.user_metadata?.full_name ||
+          session.user.email ||
+          "Pengguna Baru",
+        role: "member",
+      })
+      .select("role, full_name")
+      .maybeSingle()
+
+    if (createError || !created) {
+      console.error(
+        "Gagal membuat profil user:",
+        createError?.message,
+        createError?.code,
+      )
+      redirect("/login")
+    }
+
+    profile = created
   }
 
   const isAdmin = profile.role === "admin"
