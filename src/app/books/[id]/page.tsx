@@ -1,20 +1,27 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
+import { connection } from "next/server"
 import Link from "next/link"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { BorrowButton } from "@/components/books/borrow-button"
+import { WishlistButton } from "@/components/books/wishlist-button"
 import {
   ReviewsSection,
   ReviewsSectionFallback,
 } from "@/components/books/reviews-section"
 import { getBookById, type GoogleBook } from "@/lib/google-books"
+import { createClient } from "@/lib/supabase/server"
 
 async function BookDetailContent({
   params,
 }: {
   params: Promise<{ id: string }>
 }) {
+  // Query Supabase tidak boleh jalan saat prerender (bikin blocking route).
+  await connection()
+
   const { id } = await params
 
   let book: GoogleBook
@@ -22,6 +29,35 @@ async function BookDetailContent({
     book = await getBookById(id)
   } catch {
     notFound()
+  }
+
+  // Stok ada di DB kita, bukan di Google Books. Buku yang belum pernah
+  // dipinjam/diulas belum ada barisnya -> stok default 1.
+  const supabase = await createClient()
+  const { data: bookRow } = await supabase
+    .from("books")
+    .select("id, available_copies")
+    .eq("google_books_id", book.id)
+    .maybeSingle()
+
+  const stock = bookRow?.available_copies ?? 1
+
+  // Status wishlist user yang login (false kalau belum login
+  // atau buku belum pernah ada di tabel books)
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  let wishlisted = false
+  if (user && bookRow) {
+    const { data: savedRow } = await supabase
+      .from("wishlists")
+      .select("book_id")
+      .eq("user_id", user.id)
+      .eq("book_id", bookRow.id)
+      .maybeSingle()
+
+    wishlisted = !!savedRow
   }
 
   const coverUrl = book.thumbnail ?? "https://placehold.co/300x450?text=No+Cover"
@@ -99,16 +135,52 @@ async function BookDetailContent({
               </CardContent>
             </Card>
 
-            <BorrowButton
-              bookData={{
-                id: book.id,
-                title: book.title,
-                author: book.author ?? null,
-                cover: book.thumbnail ?? null,
-                description: book.description ?? null,
-                publishedDate: book.publishedDate ?? null,
-              }}
-            />
+            <p className="text-sm font-medium text-muted-foreground">
+              Sisa Stok:{" "}
+              <span
+                className={
+                  stock > 0
+                    ? "text-foreground"
+                    : "font-semibold text-destructive"
+                }
+              >
+                {stock}
+              </span>
+            </p>
+
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                {stock > 0 ? (
+                  <BorrowButton
+                    bookData={{
+                      id: book.id,
+                      title: book.title,
+                      author: book.author ?? null,
+                      cover: book.thumbnail ?? null,
+                      description: book.description ?? null,
+                      publishedDate: book.publishedDate ?? null,
+                    }}
+                  />
+                ) : (
+                  <Button
+                    disabled
+                    variant="destructive"
+                    className="w-full py-4 text-lg"
+                  >
+                    Stok Habis
+                  </Button>
+                )}
+              </div>
+
+              <WishlistButton
+                bookId={bookRow?.id ?? null}
+                googleBooksId={book.id}
+                title={book.title}
+                author={book.author ?? null}
+                cover={book.thumbnail ?? null}
+                initialWishlisted={wishlisted}
+              />
+            </div>
           </div>
         </div>
 

@@ -44,6 +44,12 @@ type LoanRow = {
   profiles?: { full_name?: string | null } | null
 }
 
+type WishlistRow = {
+  book_id: string
+  created_at?: string | null
+  books?: BookInfo | null
+}
+
 type SupabaseServer = Awaited<ReturnType<typeof createClient>>
 
 // --- Helper tampilan ---
@@ -274,6 +280,26 @@ async function DashboardContent() {
     }
   }
 
+  // --- Wishlist: buku yang disimpan user ini (join judul & penulis) ---
+  let wishlistData: WishlistRow[] = []
+
+  const { data: wishlistRows, error: wishlistError } = await supabase
+    .from("wishlists")
+    .select("book_id, created_at, books ( title, author, cover_url )")
+    .eq("user_id", session.user.id)
+    .order("created_at", { ascending: false })
+
+  if (wishlistError) {
+    console.error(
+      "Gagal memuat wishlist:",
+      wishlistError.message,
+      wishlistError.code,
+    )
+  } else {
+    // cast: supabase-js mengira join books many-to-one jadi array
+    wishlistData = (wishlistRows ?? []) as unknown as WishlistRow[]
+  }
+
   // --- Ringkasan (dihitung dari data yang sudah di-fetch) ---
   const totalLoans = loansData.length
   const activeLoans = loansData.filter(
@@ -440,6 +466,61 @@ async function DashboardContent() {
                   })}
                 </TableBody>
               </Table>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Buku yang disimpan (wishlist) */}
+      <div className="mt-10">
+        <h2 className="mb-4 text-lg font-semibold tracking-tight">
+          Buku yang Disimpan (Wishlist)
+        </h2>
+
+        {wishlistData.length === 0 ? (
+          <div className="rounded-xl border border-dashed px-6 py-10 text-center">
+            <p className="text-sm font-medium">Belum ada buku yang disimpan.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Klik ikon hati di halaman detail buku untuk menyimpannya ke sini.
+            </p>
+          </div>
+        ) : (
+          <Card className="p-0">
+            <CardContent className="p-0">
+              <ul>
+                {wishlistData.map((item) => (
+                  <li
+                    key={item.book_id}
+                    className="flex items-center gap-4 border-b border-border px-4 py-3 last:border-b-0"
+                  >
+                    <div className="shrink-0">
+                      {item.books?.cover_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={item.books.cover_url}
+                          alt={item.books?.title || "Cover buku"}
+                          className="h-14 w-10 rounded-md object-cover ring-1 ring-border"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-10 items-center justify-center rounded-md bg-muted ring-1 ring-border">
+                          <BookOpen
+                            className="h-5 w-5 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium leading-snug">
+                        {item.books?.title || "Buku tidak ditemukan"}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {item.books?.author || "Penulis tidak diketahui"}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </CardContent>
           </Card>
         )}
