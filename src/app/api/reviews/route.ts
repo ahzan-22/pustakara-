@@ -1,24 +1,42 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { sanitizeBookData, sanitizeGoogleBooksId } from "@/lib/book-data"
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const MAX_BODY = 5000
 
 export async function POST(req: NextRequest) {
   try {
     const { bookId, googleBooksId, bookData, rating, body, isSpoiler } =
       await req.json()
 
-    if (!rating || !body) {
+    const numericRating = Number(rating)
+
+    if (
+      !Number.isInteger(numericRating) ||
+      numericRating < 1 ||
+      numericRating > 5
+    ) {
+      return NextResponse.json(
+        { error: "Rating harus antara 1 sampai 5" },
+        { status: 400 },
+      )
+    }
+
+    const reviewBody = typeof body === "string" ? body.trim() : ""
+
+    if (!reviewBody) {
       return NextResponse.json(
         { error: "Data tidak lengkap" },
         { status: 400 },
       )
     }
 
-    if (Number(rating) < 1 || Number(rating) > 5) {
-      return NextResponse.json(
-        { error: "Rating harus antara 1 sampai 5" },
-        { status: 400 },
-      )
-    }
+    // Hanya terima UUID sebagai bookId; kalau tidak, pakai jalur google_books_id.
+    const safeBookId =
+      typeof bookId === "string" && UUID.test(bookId) ? bookId : null
+    const safeGoogleBooksId = sanitizeGoogleBooksId(googleBooksId)
+    const safeBookData = sanitizeBookData(bookData)
 
     const supabase = await createClient()
 
@@ -36,10 +54,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 0. Tentukan buku: pakai bookId bila ada, atau cari/buat dari google_books_id
-    let resolvedBookId: string | null = bookId ?? null
+    let resolvedBookId: string | null = safeBookId
 
     if (!resolvedBookId) {
-      if (!googleBooksId) {
+      if (!safeGoogleBooksId) {
         return NextResponse.json(
           { error: "bookId atau googleBooksId wajib diisi" },
           { status: 400 },
@@ -49,7 +67,7 @@ export async function POST(req: NextRequest) {
       const { data: existingBook, error: fetchError } = await supabase
         .from("books")
         .select("id")
-        .eq("google_books_id", googleBooksId)
+        .eq("google_books_id", safeGoogleBooksId)
         .maybeSingle()
 
       if (fetchError) {
@@ -68,13 +86,13 @@ export async function POST(req: NextRequest) {
         const { data: newBook, error: insertError } = await supabase
           .from("books")
           .insert({
-            google_books_id: googleBooksId,
-            title: bookData?.title ?? "Tanpa Judul",
-            author: bookData?.author ?? "Penulis Tidak Diketahui",
-            cover_url: bookData?.cover ?? null,
-            synopsis: bookData?.description ?? null,
-            year: bookData?.publishedDate
-              ? new Date(bookData.publishedDate).getFullYear()
+            google_books_id: safeGoogleBooksId,
+            title: safeBookData.title || "Tanpa Judul",
+            author: safeBookData.author || "Penulis Tidak Diketahui",
+            cover_url: safeBookData.cover,
+            synopsis: safeBookData.description,
+            year: safeBookData.publishedDate
+              ? new Date(safeBookData.publishedDate).getFullYear()
               : null,
             total_copies: 1,
             available_copies: 1,
@@ -123,9 +141,9 @@ export async function POST(req: NextRequest) {
         {
           user_id: user.id,
           book_id: resolvedBookId,
-          rating,
-          body,
-          is_spoiler: isSpoiler ?? false,
+          rating: numericRating,
+          body: reviewBody.slice(0, MAX_BODY),
+          is_spoiler: isSpoiler === true,
           is_verified: isVerified,
         },
         { onConflict: "user_id,book_id" },
