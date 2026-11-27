@@ -43,7 +43,6 @@ export function BorrowButton({ bookData }: BorrowButtonProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: session.user.id,
           bookData: {
             id: bookData.id,
             title: bookData.title,

@@ -3,10 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, bookId, googleBooksId, bookData, rating, body, isSpoiler } =
+    const { bookId, googleBooksId, bookData, rating, body, isSpoiler } =
       await req.json()
 
-    if (!userId || !rating || !body) {
+    if (!rating || !body) {
       return NextResponse.json(
         { error: "Data tidak lengkap" },
         { status: 400 },
@@ -21,6 +21,19 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient()
+
+    // Identitas penulis diambil dari session login, bukan dari body,
+    // supaya ulasan tidak bisa dibuat atas nama orang lain.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Anda harus login terlebih dahulu" },
+        { status: 401 },
+      )
+    }
 
     // 0. Tentukan buku: pakai bookId bila ada, atau cari/buat dari google_books_id
     let resolvedBookId: string | null = bookId ?? null
@@ -86,7 +99,7 @@ export async function POST(req: NextRequest) {
     const { data: returnedLoan, error: loanError } = await supabase
       .from("loans")
       .select("id")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("book_id", resolvedBookId)
       .eq("status", "returned")
       .limit(1)
@@ -108,7 +121,7 @@ export async function POST(req: NextRequest) {
       .from("reviews")
       .upsert(
         {
-          user_id: userId,
+          user_id: user.id,
           book_id: resolvedBookId,
           rating,
           body,

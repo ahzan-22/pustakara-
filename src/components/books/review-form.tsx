@@ -127,7 +127,6 @@ export function ReviewForm({ bookId, bookData }: ReviewFormProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: session.user.id,
           bookId: bookId ?? null,
           googleBooksId: bookData.id,
           bookData,

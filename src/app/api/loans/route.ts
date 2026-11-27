@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, bookData } = await req.json()
+    const { bookData } = await req.json()
 
-    if (!userId || !bookData) {
+    if (!bookData) {
       return NextResponse.json(
         { error: "Data tidak lengkap" },
         { status: 400 },
@@ -13,6 +13,19 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = await createClient()
+
+    // Identitas pengambil diambil dari session login, bukan dari body,
+    // supaya pinjaman tidak bisa diajukan atas nama orang lain.
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "Anda harus login terlebih dahulu" },
+        { status: 401 },
+      )
+    }
 
     // 1. Cek apakah buku sudah ada di tabel books berdasarkan google_books_id
     const { data: existingBook, error: fetchError } = await supabase
@@ -57,7 +70,7 @@ export async function POST(req: NextRequest) {
 
     // 3. INSERT ke tabel loans dengan status 'pending'
     const { error: loanError } = await supabase.from("loans").insert({
-      user_id: userId,
+      user_id: user.id,
       book_id: bookId,
       status: "pending",
     })
