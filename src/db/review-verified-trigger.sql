@@ -10,6 +10,14 @@
 --   - user biasa -> selalu dihitung ulang dari riwayat pinjaman
 --     (ada loan status 'returned' untuk user+buku itu -> true)
 --   - admin       -> boleh mengubah (dipakai auto-verify saat pengembalian)
+--
+-- MASALAH KEDUA: policy yang sama juga tidak mengunci kolom identitas baris.
+-- User bisa PATCH {"book_id": "<buku-lain>"} pada ulasannya sendiri, sehingga
+-- ulasan terbit di buku yang tidak pernah dia pinjam (fitur "ulasan terverifikasi
+-- pembaca" jadi bisa dibobol tanpa lewat jalur pinjam-mengembalikan).
+--
+-- FIX KEDUA: di jalur UPDATE non-admin, identitas baris dibekukan di tempat -
+-- id, user_id, book_id dan created_at diambil kembali dari baris lama.
 
 create or replace function public.enforce_review_verification()
 returns trigger
@@ -23,6 +31,15 @@ begin
   -- Admin: biarkan (inilah jalur auto-verify saat buku dikembalikan)
   if public.is_admin() then
     return new;
+  end if;
+
+  -- User biasa: baris tidak boleh dipindahkan ke buku/user lain atau
+  -- identitasnya diubah (TG_OP = 'UPDATE' saja; di INSERT belum ada OLD)
+  if TG_OP = 'UPDATE' then
+    new.id         := old.id;
+    new.user_id    := old.user_id;
+    new.book_id    := old.book_id;
+    new.created_at := old.created_at;
   end if;
 
   -- User biasa: abaikan nilai is_verified dari client, pakai fakta di tabel loans
@@ -73,3 +90,13 @@ execute function public.enforce_review_verification();
 --    - tulis ulasan saat buku masih dipinjam  -> label "💬 Kamu mengulas sebagai pembaca"
 --    - admin Konfirmasi Kembali               -> label berubah "✅ Kamu sudah meminjam buku ini"
 --    - edit ulasan setelahnya                 -> label TETAP ✅ (tidak balik ke 💬)
+--
+-- 5. Tes penguncian kolom identitas (masuk jalur user biasa, sama seperti tes 3):
+--
+-- update public.reviews
+-- set book_id = '<uuid-buku-lain>'
+-- where id = '<id-ulasan>'
+-- returning id, book_id;
+--
+--    Hasilnya book_id TIDAK berubah (tetap buku asal) - baris dibekukan.
+--    Kolom yang masih boleh diubah user biasa: rating, body, is_spoiler.
